@@ -1,0 +1,45 @@
+import csv
+import time
+import asyncio
+from bleak import BleakScanner, BleakClient
+from PyObjCTools import KeyValueCoding
+from datetime import datetime
+
+filename = str(datetime.now().strftime('%Y_%m_%d')) + "data.csv"
+f = open(filename, "w", newline='')
+f.truncate()
+
+async def main():
+    devices = await BleakScanner.discover()
+    for d in devices:
+        if KeyValueCoding.getKey(d.details[0], 'name') == 'Arduino':
+            logger = d
+            print('Found it')
+    address = str(KeyValueCoding.getKey(logger.details[0], 'identifier'))
+    async with BleakClient(address,timeout=12.0) as client:
+        print("Services:")
+        svcs = client.services
+        for service in svcs:
+            print(service)
+        fields = ["Time","Temperature", "Humidity"]
+        writer = csv.writer(f)
+        writer.writerow(fields)
+        try:
+            while True:
+                currentDateAndTime = datetime.now()
+                current_time = currentDateAndTime.strftime('%H:%M')
+                temperature = await client.read_gatt_char("d888a9c3-f3cc-11ed-a05b-0242ac120003")
+                humidity = await client.read_gatt_char("d888a9c4-f3cc-11ed-a05b-0242ac120003")
+                temperature = int.from_bytes(temperature, byteorder='big')
+                humidity = int.from_bytes(humidity, byteorder='big')
+                print("Temperature", temperature)
+                print("Humidity", humidity)
+                time.sleep(10)
+                data = [current_time,temperature,humidity]
+                writer.writerow(data)
+        except KeyboardInterrupt:
+            f.close()
+
+
+
+asyncio.run(main())
